@@ -65,5 +65,22 @@ CREATE TABLE urls (
 );
 
 
+⚙️ Compile & Run
+
+Step 1: Open Command Prompt
+Press Win + R, type cmd, and press Enter.
+
+Step 2: Navigate to the Project Directory
+
+cd /d D:\URL_Shortner
+
+Step 3: Compile the C++ Program
+
+g++ url_shortener.cpp -o url_shortener -I"D:\URL_Shortner\mysql-connector-c++-9.2.0-winx64\include" -L"D:\URL_Shortner\mysql-connector-c++-9.2.0-winx64\lib64" -lmysqlcppconn
+
+Step 4: Run the Executable
+
+url_shortener.exe
+
 🔗 Contribute & Support
 Feel free to contribute by reporting issues or suggesting improvements! 🚀

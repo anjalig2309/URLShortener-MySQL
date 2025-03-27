@@ -1,84 +1,81 @@
 #include <iostream>
 #include <mysql/mysql.h>
-#include <ctime>
 #include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
-const char *HOST = "localhost";
-const char *USER = "root";
-const char *PASSWORD = "";
-const char *DATABASE = "url_shortener";
+#define HOST "localhost"
+#define USER "root"
+#define PASSWORD ""
+#define DATABASE "mydb"
 
-string generateShortCode() {
+string generateShortCode(MYSQL *conn) {
     string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    string shortCode = "";
-    srand(time(0));
-    for (int i = 0; i < 6; i++) {
-        shortCode += chars[rand() % chars.length()];
-    }
+    string shortCode;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    
+    do {
+        shortCode.clear();
+        for (int i = 0; i < 6; i++) {
+            shortCode += chars[rand() % chars.length()];
+        }
+        
+        string query = "SELECT COUNT(*) FROM urls WHERE short_code = '" + shortCode + "'";
+        if (mysql_query(conn, query.c_str())) {
+            cerr << "Query execution failed: " << mysql_error(conn) << endl;
+            return "";
+        }
+        
+        res = mysql_store_result(conn);
+        row = mysql_fetch_row(res);
+    } while (atoi(row[0]) > 0);
+    
+    mysql_free_result(res);
     return shortCode;
 }
 
-void insertURL(string longURL) {
-    MYSQL *conn = mysql_init(NULL);
-    if (!mysql_real_connect(conn, HOST, USER, PASSWORD, DATABASE, 0, NULL, 0)) {
-        cout << "Database connection failed!" << endl;
-        return;
+void saveURL(MYSQL *conn, string longURL) {
+    string shortCode = generateShortCode(conn);
+    if (shortCode.empty()) return;
+    
+    char* escapedURL = new char[2 * longURL.length() + 1];
+    mysql_real_escape_string(conn, escapedURL, longURL.c_str(), longURL.length());
+    
+    string query = "INSERT INTO urls (short_code, long_url) VALUES ('" + shortCode + "', '" + escapedURL + "')";
+    
+    if (mysql_query(conn, query.c_str())) {
+        cerr << "Error inserting data: " << mysql_error(conn) << endl;
+    } else {
+        cout << "Short URL generated: " << shortCode << endl;
     }
     
-    string shortCode = generateShortCode();
-    string query = "INSERT INTO urls (short_code, long_url) VALUES ('" + shortCode + "', '" + longURL + "')";
-    if (mysql_query(conn, query.c_str()) == 0) {
-        cout << "Shortened URL: http://localhost/" << shortCode << endl;
-    } else {
-        cout << "Failed to insert URL." << endl;
-    }
-    mysql_close(conn);
-}
-
-void getLongURL(string shortCode) {
-    MYSQL *conn = mysql_init(NULL);
-    if (!mysql_real_connect(conn, HOST, USER, PASSWORD, DATABASE, 0, NULL, 0)) {
-        cout << "Database connection failed!" << endl;
-        return;
-    }
-    
-    string query = "SELECT long_url FROM urls WHERE short_code = '" + shortCode + "'";
-    if (mysql_query(conn, query.c_str()) == 0) {
-        MYSQL_RES *res = mysql_store_result(conn);
-        MYSQL_ROW row;
-        if ((row = mysql_fetch_row(res))) {
-            cout << "Redirect to: " << row[0] << endl;
-        } else {
-            cout << "Short URL not found." << endl;
-        }
-        mysql_free_result(res);
-    } else {
-        cout << "Query failed." << endl;
-    }
-    mysql_close(conn);
+    delete[] escapedURL;
 }
 
 int main() {
-    int choice;
-    string url, code;
+    srand(time(0));
     
-    cout << "1. Shorten URL\n2. Retrieve Original URL\nEnter choice: ";
-    cin >> choice;
-    cin.ignore();
+    MYSQL *conn;
+    conn = mysql_init(NULL);
     
-    if (choice == 1) {
-        cout << "Enter long URL: ";
-        getline(cin, url);
-        insertURL(url);
-    } else if (choice == 2) {
-        cout << "Enter short code: ";
-        cin >> code;
-        getLongURL(code);
-    } else {
-        cout << "Invalid choice!" << endl;
+    if (!conn) {
+        cerr << "MySQL initialization failed!" << endl;
+        return 1;
     }
     
+    if (!mysql_real_connect(conn, HOST, USER, PASSWORD, DATABASE, 0, NULL, 0)) {
+        cerr << "Database connection failed: " << mysql_error(conn) << endl;
+        return 1;
+    }
+    
+    string longURL;
+    cout << "Enter long URL: ";
+    cin >> longURL;
+    
+    saveURL(conn, longURL);
+    
+    mysql_close(conn);
     return 0;
 }

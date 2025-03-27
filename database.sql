@@ -1,0 +1,9 @@
+CREATE DATABASE IF NOT EXISTS url_shortener_db;
+USE url_shortener_db;
+
+CREATE TABLE IF NOT EXISTS urls (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    short_url VARCHAR(50) UNIQUE NOT NULL,
+    long_url TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

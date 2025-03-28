@@ -1,81 +1,68 @@
 #include <iostream>
 #include <mysql/mysql.h>
+#include <string>
 #include <cstdlib>
 #include <ctime>
 
 using namespace std;
 
-#define HOST "localhost"
-#define USER "root"
-#define PASSWORD ""
-#define DATABASE "mydb"
+const string CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const int SHORT_CODE_LENGTH = 6;
 
+// Function to generate a random short URL
 string generateShortCode(MYSQL *conn) {
-    string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     string shortCode;
-    MYSQL_RES *res;
-    MYSQL_ROW row;
+    bool unique = false;
+    srand(time(0));
     
-    do {
-        shortCode.clear();
-        for (int i = 0; i < 6; i++) {
-            shortCode += chars[rand() % chars.length()];
+    while (!unique) {
+        shortCode = "";
+        for (int i = 0; i < SHORT_CODE_LENGTH; i++) {
+            shortCode += CHARSET[rand() % CHARSET.length()];
         }
-        
-        string query = "SELECT COUNT(*) FROM urls WHERE short_code = '" + shortCode + "'";
-        if (mysql_query(conn, query.c_str())) {
-            cerr << "Query execution failed: " << mysql_error(conn) << endl;
-            return "";
+
+        string query = "SELECT COUNT(*) FROM urls WHERE short_code='" + shortCode + "'";
+        if (mysql_query(conn, query.c_str()) == 0) {
+            MYSQL_RES *res = mysql_store_result(conn);
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if (row && atoi(row[0]) == 0) {
+                unique = true;
+            }
+            mysql_free_result(res);
         }
-        
-        res = mysql_store_result(conn);
-        row = mysql_fetch_row(res);
-    } while (atoi(row[0]) > 0);
-    
-    mysql_free_result(res);
+    }
     return shortCode;
 }
 
-void saveURL(MYSQL *conn, string longURL) {
+// Function to insert URL into the database
+void insertURL(MYSQL *conn, string longURL) {
     string shortCode = generateShortCode(conn);
-    if (shortCode.empty()) return;
+    string query = "INSERT INTO urls (long_url, short_code) VALUES ('" + longURL + "', '" + shortCode + "')";
     
-    char* escapedURL = new char[2 * longURL.length() + 1];
-    mysql_real_escape_string(conn, escapedURL, longURL.c_str(), longURL.length());
-    
-    string query = "INSERT INTO urls (short_code, long_url) VALUES ('" + shortCode + "', '" + escapedURL + "')";
-    
-    if (mysql_query(conn, query.c_str())) {
-        cerr << "Error inserting data: " << mysql_error(conn) << endl;
+    if (mysql_query(conn, query.c_str()) == 0) {
+        cout << "Shortened URL: http://short.ly/" << shortCode << endl;
     } else {
-        cout << "Short URL generated: " << shortCode << endl;
+        cerr << "Failed to insert URL: " << mysql_error(conn) << endl;
     }
-    
-    delete[] escapedURL;
 }
 
 int main() {
-    srand(time(0));
-    
-    MYSQL *conn;
-    conn = mysql_init(NULL);
-    
+    MYSQL *conn = mysql_init(NULL);
     if (!conn) {
         cerr << "MySQL initialization failed!" << endl;
         return 1;
     }
-    
-    if (!mysql_real_connect(conn, HOST, USER, PASSWORD, DATABASE, 0, NULL, 0)) {
-        cerr << "Database connection failed: " << mysql_error(conn) << endl;
+
+    if (!mysql_real_connect(conn, "localhost", "root", "", "mydb", 3306, NULL, 0)) {
+        cerr << "Connection failed: " << mysql_error(conn) << endl;
         return 1;
     }
-    
+
     string longURL;
-    cout << "Enter long URL: ";
-    cin >> longURL;
-    
-    saveURL(conn, longURL);
-    
+    cout << "Enter URL to shorten: ";
+    getline(cin, longURL);
+    insertURL(conn, longURL);
+
     mysql_close(conn);
     return 0;
 }
